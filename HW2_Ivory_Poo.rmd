@@ -1,0 +1,208 @@
+---
+title: 'HW2_Ivory_Poo'
+output: html_document
+author: Ivory Poo
+---
+
+Turn in your HW on this Rmarkdown file. Add your names here at the top. Your answers should be neatly arranged in blocks of code below; insert code blocks as needed. Use the markdown language to add any text you need to explain your homework. 
+
+##Getting and Handling Large Data Sets
+
+####GET THE DATA
+
+You will acquire and analyze a real dataset on baby name popularity provided by the Social Security Administration. To warm up, we will ask you a few simple questions that can be answered by inspecting the data.
+
+The data can be downloaded in zip format from:
+http://www.ssa.gov/oact/babynames/state/namesbystate.zip  (~22MB)
+
+#### QUESTION 1
+Please describe the format of the data files. Can you identify any limitations or distortions of the data.
+
+First, download the zip file and unzip it to grab the contents. You will see lots of different files. Store them in a directory called "namesbystate". Then we write R code to read those files and put them together. 
+
+Answer: The data files are seperated by states.
+
+```{r}
+setwd("~/Desktop/Machine Learning/namesbystate")
+df<-NULL
+tem<-list.files()
+for (i in tem){
+  if(grepl('.TXT',i)){
+  #print (i)
+  temp1 <- read.table(i, sep = ",")
+  df<-rbind(df,temp1)
+  }}
+col<-c("state","gender","year","name","occurences")
+colnames(df)<-col
+write.csv(df,"allstate.csv")
+df<-read.csv("allstate.csv")
+```
+
+temp1Ω
+#### QUESTION 2
+What is the most popular name of all time across both genders?
+
+
+Answer: James and Mary are the most popular name for male and female respectively.
+```{r}
+library("dplyr")
+df %>%
+  group_by(gender,name) %>%
+  summarize(sum_occurences = sum(occurences))%>%
+  arrange(desc(sum_occurences),gender)
+```
+
+#### QUESTION 3
+What is the most gender ambiguous name in 2013? 1945? (you need to come up with an ambiguity metric, so think about how you may want to implement this. You may of course search for definitions of ambiguity.)
+
+
+Answer: 
+```{r}
+library(data.table)
+
+ambiguous_func<-function(x)
+  {
+  DT<-data.table(df)
+  DT_2013=DT[year == x] 
+  DT_2013=DT_2013[,sum(occurences),by=.(name,gender)]
+  temp1 <-  DT_2013 %>% group_by(name) %>% filter(n()>1) %>% arrange(desc(V1)) 
+  temp1<-data.table(temp1)
+  
+  ratio <- function(x) (x/lag(x))
+  temp2<-temp1%>% group_by(name)%>%mutate_each(funs(min_ratio=ratio),V1)
+  temp2=na.omit(temp2)
+  temp2$V1<-NULL
+  temp2$gender<-NULL
+  
+  temp1=temp1[,sum(V1),by=.(name)]
+  colnames(temp1)<-c("name","total_occurences")
+  temp<-merge(temp1,temp2,by="name")
+  temp$ambiguity<-temp$total_occurences*temp$min_ratio
+  temp<-data.table(temp)
+  temp<-temp[min_ratio>=0.75]
+  
+  result<-( temp[which.max(temp$ambiguity),])
+  print (result)
+  }
+
+ambiguous_func(2013)
+ambiguous_func(1945)
+```
+
+#### QUESTION 4
+Of the names represented in the data, find the name that has had the largest percentage increase in popularity since 1980. Largest decrease?
+
+Answer: The largest percentage increase and largest percentage decrease since 1980 is Aria by 127440% increase and Jill by -99.8% decrease.
+```{r}
+DT<-data.table(df)
+df_q4=DT[ year == 1980 | year ==2015] 
+df_q4=df_q4[,sum(occurences),by=.(name,year)]
+pct <- function(x) ((x-lag(x))/lag(x))
+df_q4a<-df_q4 %>%group_by(name) %>%arrange(name,year)%>%mutate_each(funs(pct_change=pct),V1)
+df_q4a[which.min(df_q4a$pct_change),] 
+df_q4a[which.max(df_q4a$pct_change),]
+
+```
+
+#### QUESTION 5
+Can you identify names that may have had an even larger increase or decrease in popularity? (This requires you to consider every year as the start year and find the greatest increase/descrease across all years. Print out the top name for growth from each year.)
+
+Answer: The names that have the largest increase and decrease in popularity are Liam by 365520% in 1954 and Debbie -99.97%  in 1959.
+```{r}
+DT_grouped<-df %>%
+  group_by(name,year) %>%
+  summarize(sum_occurences = sum(occurences))
+
+DT_grouped<-data.table(DT_grouped)
+df_q5=DT_grouped[year !=2015] 
+df_q5a=DT_grouped[year ==2015] 
+df_q5a$year<-NULL
+colnames(df_q5a)<-c("name","2015occurences")
+dftemp<-right_join(df_q5a,df_q5,by="name")
+dftemp$pct_change<-(dftemp$`2015occurences`-dftemp$sum_occurences)/dftemp$sum_occurences
+dftemp[which.min(dftemp$pct_change),]
+dftemp[which.max(dftemp$pct_change),]
+```
+
+This gives interesting results, and may be used in a different way with a rolling window than using all the data. 
+
+#### QUESTION 6
+
+What insight can you extract from this dataset? Feel free to combine the baby names data with other publicly available datasets or APIs, but be sure to include code for accessing any alternative data that you use.
+
+This is an open-ended question and you are free to answer as you see fit. In fact, it would be great if you find a way to look at the data that is highly interesting.
+
+I get the top 5 names that have the largest percentage increase in popularity since 1980. It is surprising to see that two of the names have existed since 1920, the other three first appear in 1970.
+```{r}
+df_q4a<-df_q4a %>%arrange(desc(pct_change))
+#df_q4a[1:10,1]
+library(ggplot2)
+Aria<-DT_grouped[name=="Aria"]
+Colton<-DT_grouped[name=="Colton"]
+Skylar<-DT_grouped[name=="Skylar"]
+Mateo<-DT_grouped[name=="Mateo"]
+Mila<-DT_grouped[name=="Mila"]
+
+ggplot() + 
+geom_line(data=Aria, aes(x=year,y=sum_occurences,color="Aria")) + 
+geom_line(data=Colton, aes(x=year,y=sum_occurences,color="Colton"))+
+geom_line(data=Skylar, aes(x=year,y=sum_occurences, color='Skylar'))+
+geom_line(data=Mateo, aes(x=year,y=sum_occurences, color='Mateo')) + 
+geom_line(data=Mila, aes(x=year,y=sum_occurences, color='Mila'))+
+  scale_colour_manual(name="Name",values=c(Aria="red", Colton="blue", Skylar="purple", Mateo="orange",Mila="yellow"))
+```
+#### QUESTION 7
+
+Go to the airlines data site: 
+http://stat-computing.org/dataexpo/2009/the-data.html. 
+Read in the airlines data set for 2008 into a data frame.
+How many rows of data do you have?
+
+Answer:The data has 7,009,728 rows.
+```{r}
+setwd("~/Desktop/Machine Learning")
+df1<-read.csv('2008.csv')
+nrow(df1) #7,009,728
+```
+
+#### QUESTION 8
+
+Remove all rows of the data frame with missing data. How many rows of data do you have now?
+
+Answer:The data has 1,524,735 rows.
+```{r}
+df1=na.omit(df1)
+nrow(df1) #1524735
+```
+
+#### QUESTION 9
+
+Fit one regression model each to explain "DepDelay" and "ArrDelay". Use your judgment as to which variables you might use to explain these outcomes. Use a subset of 1 million rows of the data you created with no missing data. Keep the remaining data for out-of-sample testing. (**Remember to factor all categorical variables.**)
+```{r}
+df1$Month=factor(df1$Month)
+df1$TaxiTotal=df1$TaxiIn+df1$TaxiOut
+
+df1 <- df1[sample(nrow(df1)), ]     #randomize the original dataset     
+df1.sample <- df1[1:1000000, ]              
+df1.holdout <- df1[1000001:nrow(df1), ]  
+
+res<-lm(ArrDelay~DepDelay+Month+TaxiTotal,data=df1.sample)
+summary(res)
+```
+
+
+#### QUESTION 10
+
+Now take the fitted regression and predict delays using the remaining data from the no-missing data set (this is the data you did not use in the fitting the model). Compare this to the actual delays and report the absolute mean error in your prediction. 
+
+The mean error in my prediction is approximate to 9 minutes, equivalent to 25.6%.
+```{r}
+df1.holdout["pred"]<-predict(res,df1.holdout)
+df1.holdout["error"]<-abs(df1.holdout$pred-df1.holdout$ArrDelay)
+df1.holdout["error_percent"]<-abs(df1.holdout$pred-df1.holdout$ArrDelay)/df1.holdout$ArrDelay
+mean(df1.holdout$error)
+mean(df1.holdout$error_percent)
+```
+
+
+
